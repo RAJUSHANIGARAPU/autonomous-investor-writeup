@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A trading research platform engineered to falsify its own strategies — a falsification-first quant research harness and case study.">
+<title>Autonomous Investor — A Falsification-First Research Platform</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel2:#0f141b; --line:#1f2937;
+    --ink:#e6edf3; --mut:#9aa7b4; --dim:#6b7785;
+    --accent:#38bdf8; --good:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  h1,h2,h3{line-height:1.2;letter-spacing:-0.01em;margin:0}
+  .eyebrow{font:600 12px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+  .mut{color:var(--mut)} .dim{color:var(--dim)}
+  code,.k{font-family:var(--mono);font-size:.92em}
+
+  header{padding:72px 0 40px;border-bottom:1px solid var(--line);
+    background:radial-gradient(1200px 400px at 70% -10%,rgba(56,189,248,.10),transparent 60%)}
+  h1{font-size:clamp(28px,5vw,46px);font-weight:800;margin:14px 0 16px;max-width:18ch}
+  .lede{font-size:clamp(16px,2.4vw,20px);color:var(--mut);max-width:62ch}
+  .thesis{margin-top:22px;padding:16px 18px;border-left:3px solid var(--violet);
+    background:var(--panel2);border-radius:0 10px 10px 0;color:var(--ink);max-width:70ch}
+
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:34px 0 8px}
+  .metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .metric .n{font:800 26px/1 var(--sans);letter-spacing:-.02em}
+  .metric .l{font-size:12px;color:var(--mut);margin-top:6px}
+  .metric .s{font-size:11px;color:var(--dim);margin-top:2px}
+
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:clamp(20px,3vw,28px);font-weight:750;margin-bottom:6px}
+  .sub{color:var(--mut);margin:0 0 22px;max-width:68ch}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h3{font-size:16px;font-weight:700;margin-bottom:6px}
+  .card p{margin:0;color:var(--mut);font-size:14.5px}
+  .card .tag{font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:10px}
+
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 18px;font-family:var(--mono);font-size:13px}
+  .flow .step{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+  .flow .arr{color:var(--dim)}
+
+  .oss{margin:0 0 22px;padding:14px 18px;border-left:3px solid var(--good);background:var(--panel2);
+    border-radius:0 10px 10px 0;max-width:70ch;font-size:15px}
+  .oss code{color:var(--good)}
+
+  ul.clean{list-style:none;padding:0;margin:0}
+  ul.clean li{position:relative;padding:9px 0 9px 26px;border-bottom:1px solid var(--line);color:var(--mut);font-size:14.5px}
+  ul.clean li:last-child{border-bottom:0}
+  ul.clean li::before{content:"";position:absolute;left:6px;top:17px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  ul.clean b{color:var(--ink);font-weight:650}
+
+  .finding{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .finding:last-child{border-bottom:0}
+  .badge{font:700 11px/1.4 var(--mono);padding:5px 8px;border-radius:6px;white-space:nowrap;align-self:start}
+  .b-good{background:rgba(52,211,153,.12);color:var(--good);border:1px solid rgba(52,211,153,.3)}
+  .b-warn{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.3)}
+  .b-bad{background:rgba(248,113,113,.12);color:var(--bad);border:1px solid rgba(248,113,113,.3)}
+  .b-vlt{background:rgba(167,139,250,.12);color:var(--violet);border:1px solid rgba(167,139,250,.3)}
+  .finding p{margin:0;color:var(--mut);font-size:14.5px}
+  .finding b{color:var(--ink)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .chip{font:600 12px/1 var(--mono);color:var(--mut);background:var(--panel);border:1px solid var(--line);
+    border-radius:999px;padding:8px 12px}
+
+  .pull{font-size:clamp(17px,2.6vw,22px);color:var(--ink);font-weight:600;max-width:62ch;line-height:1.45}
+  .pull .hl{color:var(--violet)}
+
+  footer{padding:40px 0 64px;color:var(--dim);font-size:13px}
+  footer a{color:var(--mut)}
+  @media(max-width:720px){
+    .metrics{grid-template-columns:repeat(2,1fr)}
+    .grid2{grid-template-columns:1fr}
+    .finding{grid-template-columns:1fr;gap:6px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Case study · Quant research infrastructure</div>
+    <h1>A trading research platform engineered to prove itself wrong.</h1>
+    <p class="lede">An autonomous, paper-trading research system with a falsification harness at its core — built not to showcase a profitable backtest, but to answer the harder question honestly: <em>does this strategy actually have an edge?</em></p>
+    <div class="thesis">
+      Most trading projects optimize for a good-looking backtest. Backtests are easy to fake and almost always overfit. This platform inverts the goal: it is a disciplined machine for <b>falsifying</b> its own ideas — and the engineering judgment to act on the answer it gives.
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="n">31</div><div class="l">strategy candidates tested</div><div class="s">0 deployable — every one falsified</div></div>
+      <div class="metric"><div class="n">self-caught</div><div class="l">a real bug in its own stats gate</div><div class="s">found by adversarial self-review</div></div>
+      <div class="metric"><div class="n">3 axes</div><div class="l">of statistical rigor</div><div class="s">multiple-testing · costs · autocorrelation</div></div>
+      <div class="metric"><div class="n">honest</div><div class="l">verdict acted on</div><div class="s">strategy disarmed → indexed</div></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>The premise</h2>
+    <p class="sub">A solo retail participant trying to generate alpha is competing against firms with faster data, lower costs, and teams of quants who have already arbitraged the obvious signals. The intellectually honest question isn't "can I make the backtest green?" — it's "would any apparent edge survive multiple-testing, realistic costs, and out-of-sample reality?" The whole platform is built around answering that without fooling itself.</p>
+    <p class="pull">The deliverable isn't a profitable bot. It's a <span class="hl">trustworthy falsification harness</span> — and the discipline to index the capital when the harness says there's no edge.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it is</h2>
+    <p class="sub">A production-deployed research service: market-data ingestion, regime classification, multi-signal generation, risk gating, and broker paper-execution — with a scheduler driving the daily cycle and a web dashboard for observability. Live on a managed cloud host behind SSO.</p>
+    <div class="grid2">
+      <div class="card"><span class="tag">Signal layer</span><h3>Multi-source fusion</h3><p>Technical, fundamental, sentiment, and positioning signals fused per ticker, gated by a macro-regime classifier and a conviction threshold before any order is placed.</p></div>
+      <div class="card"><span class="tag">Execution &amp; risk</span><h3>Guarded paper trading</h3><p>Atomic signal-claim, idempotent fills, stop/trailing/volatility exits, position sizing, drawdown and cost gates — paper-only, no real capital at risk.</p></div>
+      <div class="card"><span class="tag">Observability</span><h3>Calibration &amp; attribution</h3><p>Dashboards for prediction calibration (predicted vs realized hit-rate + ECE), per-signal P&amp;L attribution, and equity vs benchmark — surfacing the honest numbers, not the flattering ones.</p></div>
+      <div class="card"><span class="tag">Research core</span><h3>The falsification harness</h3><p>A pure, dependency-light statistics module that gates every candidate on multiple-testing, cost-floor, and autocorrelation before it could ever be trusted. <a href="https://github.com/RAJUSHANIGARAPU/falsify">Open-sourced as <code>falsify</code> →</a></p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>The falsification harness</h2>
+    <p class="sub">The centerpiece. Every candidate strategy must clear all three gates — and the test budget is rationed so the discipline can't be gamed.</p>
+    <div class="oss">
+      Extracted and open-sourced as a standalone, dependency-free library →
+      <a href="https://github.com/RAJUSHANIGARAPU/falsify"><b>github.com/RAJUSHANIGARAPU/falsify</b></a>
+      — MIT, pure-stdlib, tests passing across Python 3.9–3.13.
+    </div>
+    <ul class="clean">
+      <li><b>Multiple-testing haircut</b> — Deflated Sharpe Ratio (Bailey &amp; López de Prado): the more variants you try, the higher the bar the best one must clear, so you can't cherry-pick a survivor out of noise.</li>
+      <li><b>Cost-floor gate</b> — a gross edge below realistic round-trip cost × turnover is not an edge. This single test kills most "anomalies," which exist only below the cost floor.</li>
+      <li><b>Autocorrelation-robust significance</b> — Newey-West (HAC) t-statistics, because naïve t-stats on overlapping or serially-correlated returns silently overstate significance.</li>
+      <li><b>Pre-registration discipline</b> — the rule, variant grid, benchmark, and kill-criteria are frozen <em>before</em> data is pulled. No goalpost-moving after seeing results.</li>
+      <li><b>Rationed testing</b> — screening ideas is free and unlimited; running a real backtest is rationed to candidates that clear a structural-plausibility gate, which keeps the multiple-testing haircut honest.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Multi-agent orchestration</h2>
+    <p class="sub">Large analyses are run as deterministic workflows that fan work out, verify it adversarially, then synthesize — so conclusions survive independent scrutiny instead of resting on a single pass.</p>
+    <div class="flow">
+      <span class="step">fan-out (parallel specialists)</span><span class="arr">→</span>
+      <span class="step">adversarial verify (default-to-refute)</span><span class="arr">→</span>
+      <span class="step">synthesize (ranked, deduped)</span>
+    </div>
+    <div class="grid2">
+      <div class="card"><span class="tag">Pattern · review</span><h3>Reliability audit</h3><p>Parallel auditors across subsystems surfaced findings; each was re-checked by an independent skeptic before any fix landed — separating real correctness bugs from plausible-but-wrong ones.</p></div>
+      <div class="card"><span class="tag">Pattern · decision</span><h3>Evidence before build</h3><p>Before enabling a behavior change, a separate workflow quantified its effect on the real trade history — answering "does this help, or just change activity?" with numbers, not hope.</p></div>
+      <div class="card"><span class="tag">Pattern · discovery</span><h3>Screen → gate → test</h3><p>Candidate edges were screened by category, filtered through a pre-registration gate, and only the single survivor spent a real, pre-registered test slot.</p></div>
+      <div class="card"><span class="tag">Pattern · self-check</span><h3>Refute, don't confirm</h3><p>Surprising "passes" were handed to skeptics told to break them. That step is what caught a real bug in the platform's own significance gate.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What the harness found</h2>
+    <p class="sub">The honest scorecard — and why each result is a success of the method, not a failure of it.</p>
+
+    <div class="finding">
+      <span class="badge b-bad">No edge</span>
+      <p><b>31 candidates tested, 0 deployable.</b> Across forecasting, calendar/flow effects, cross-asset signals, carry, and event-driven strategies — none survived hostile out-of-sample testing versus simply holding the index after costs. A clean kill is the harness doing its job.</p>
+    </div>
+    <div class="finding">
+      <span class="badge b-warn">Calibration</span>
+      <p><b>The live system was confidently wrong.</b> It reported high confidence on trades that realized a near-zero win rate — confidence was <em>inversely</em> related to outcomes. The dashboard was rebuilt to surface net expectancy and a predicted-vs-realized gap, so the metrics can no longer flatter.</p>
+    </div>
+    <div class="finding">
+      <span class="badge b-vlt">Self-caught bug</span>
+      <p><b>The platform found a real defect in its own statistics core.</b> An adversarial review caught a unit mismatch that was silently saturating the multiple-testing gate to a perfect score. It was fixed with a misuse-proof API (callers pass raw returns; the core computes statistics itself) and guards that reject degenerate input instead of masking it.</p>
+    </div>
+    <div class="finding">
+      <span class="badge b-good">Discipline</span>
+      <p><b>The verdict was acted on, not rationalized away.</b> Rather than p-hack a result, the strategy engine was disarmed and the platform reframed as a passive falsification harness — the correct outcome when the evidence says there is no edge.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Why this is the portfolio piece</h2>
+    <p class="sub">It demonstrates the competencies that matter for senior AI-engineering and quality-leadership work — the ability to build a system <em>and</em> the judgment to distrust it.</p>
+    <ul class="clean">
+      <li><b>Falsification mindset</b> — designing systems to disprove their own outputs is the core of both quality engineering and trustworthy ML. This project is that idea made concrete.</li>
+      <li><b>Statistical literacy under adversarial conditions</b> — multiple-testing, cost realism, and autocorrelation are exactly where naïve analysis fools itself; the harness defends all three.</li>
+      <li><b>Orchestration of automated analysis</b> — fan-out → verify → synthesize workflows that produce conclusions robust to independent scrutiny, with self-review that caught a real bug.</li>
+      <li><b>Production engineering</b> — a deployed, observable, auth-gated service with migrations, tests, and safe rollout discipline.</li>
+      <li><b>Knowing when to stop</b> — the rarest engineering skill: recognizing a negative result, reporting it honestly, and choosing the boring correct action over an exciting wrong one.</li>
+    </ul>
+    <p class="pull" style="margin-top:24px">Anyone can show a green backtest. Far fewer can build the machinery to prove their own isn't real — <span class="hl">and then trust it.</span></p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Stack</h2>
+    <div class="chips">
+      <span class="chip">Python · FastAPI</span>
+      <span class="chip">async SQLAlchemy</span>
+      <span class="chip">Alembic migrations</span>
+      <span class="chip">scheduler-driven daily cycle</span>
+      <span class="chip">broker paper-trading API</span>
+      <span class="chip">pandas · numpy</span>
+      <span class="chip">pure-stdlib statistics core</span>
+      <span class="chip">multi-agent workflows</span>
+      <span class="chip">pytest</span>
+      <span class="chip">Fly.io · SQLite volume</span>
+      <span class="chip">SSO-gated dashboard</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Autonomous Investor — personal research project. Paper trading only; not investment advice. The platform's standing conclusion is its own best result: no demonstrated edge, capital indexed, harness retained as a trustworthy lab.
+    <br><br>
+    Open-source falsification harness: <a href="https://github.com/RAJUSHANIGARAPU/falsify">github.com/RAJUSHANIGARAPU/falsify</a>
+  </div>
+</footer>
+
+</body>
+</html>
