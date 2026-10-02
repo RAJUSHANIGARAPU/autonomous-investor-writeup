@@ -6,5 +6,7 @@ and to act honestly on the answer.
 
 **Read the case study →** https://rajushanigarapu.github.io/autonomous-investor-writeup/
 
+**Part two, validation engineering →** https://rajushanigarapu.github.io/autonomous-investor-writeup/validation.html
+
 The falsification harness at its core is open-source:
 **[github.com/RAJUSHANIGARAPU/falsify](https://github.com/RAJUSHANIGARAPU/falsify)**

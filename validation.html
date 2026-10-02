@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Part two of the Autonomous Investor case study: how the system is validated before it touches money, including shadow trading, deterministic replay, a CI fidelity gate and LLM cost accounting.">
+<title>How I validate a trading system that uses LLMs before it touches money</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel2:#0f141b; --line:#1f2937;
+    --ink:#e6edf3; --mut:#9aa7b4; --dim:#6b7785;
+    --accent:#38bdf8; --good:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  h1,h2,h3{line-height:1.2;letter-spacing:-0.01em;margin:0}
+  .eyebrow{font:600 12px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+  .mut{color:var(--mut)} .dim{color:var(--dim)}
+  code,.k{font-family:var(--mono);font-size:.92em}
+
+  header{padding:72px 0 40px;border-bottom:1px solid var(--line);
+    background:radial-gradient(1200px 400px at 70% -10%,rgba(56,189,248,.10),transparent 60%)}
+  h1{font-size:clamp(28px,5vw,46px);font-weight:800;margin:14px 0 16px;max-width:18ch}
+  .lede{font-size:clamp(16px,2.4vw,20px);color:var(--mut);max-width:62ch}
+  .thesis{margin-top:22px;padding:16px 18px;border-left:3px solid var(--violet);
+    background:var(--panel2);border-radius:0 10px 10px 0;color:var(--ink);max-width:70ch}
+
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:34px 0 8px}
+  .metric{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .metric .n{font:800 26px/1 var(--sans);letter-spacing:-.02em}
+  .metric .l{font-size:12px;color:var(--mut);margin-top:6px}
+  .metric .s{font-size:11px;color:var(--dim);margin-top:2px}
+
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:clamp(20px,3vw,28px);font-weight:750;margin-bottom:6px}
+  .sub{color:var(--mut);margin:0 0 22px;max-width:68ch}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h3{font-size:16px;font-weight:700;margin-bottom:6px}
+  .card p{margin:0;color:var(--mut);font-size:14.5px}
+  .card .tag{font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:10px}
+
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 18px;font-family:var(--mono);font-size:13px}
+  .flow .step{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+  .flow .arr{color:var(--dim)}
+
+  .oss{margin:0 0 22px;padding:14px 18px;border-left:3px solid var(--good);background:var(--panel2);
+    border-radius:0 10px 10px 0;max-width:70ch;font-size:15px}
+  .oss code{color:var(--good)}
+
+  ul.clean{list-style:none;padding:0;margin:0}
+  ul.clean li{position:relative;padding:9px 0 9px 26px;border-bottom:1px solid var(--line);color:var(--mut);font-size:14.5px}
+  ul.clean li:last-child{border-bottom:0}
+  ul.clean li::before{content:"";position:absolute;left:6px;top:17px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  ul.clean b{color:var(--ink);font-weight:650}
+
+  .finding{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .finding:last-child{border-bottom:0}
+  .badge{font:700 11px/1.4 var(--mono);padding:5px 8px;border-radius:6px;white-space:nowrap;align-self:start}
+  .b-good{background:rgba(52,211,153,.12);color:var(--good);border:1px solid rgba(52,211,153,.3)}
+  .b-warn{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.3)}
+  .b-bad{background:rgba(248,113,113,.12);color:var(--bad);border:1px solid rgba(248,113,113,.3)}
+  .b-vlt{background:rgba(167,139,250,.12);color:var(--violet);border:1px solid rgba(167,139,250,.3)}
+  .finding p{margin:0;color:var(--mut);font-size:14.5px}
+  .finding b{color:var(--ink)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .chip{font:600 12px/1 var(--mono);color:var(--mut);background:var(--panel);border:1px solid var(--line);
+    border-radius:999px;padding:8px 12px}
+
+  .pull{font-size:clamp(17px,2.6vw,22px);color:var(--ink);font-weight:600;max-width:62ch;line-height:1.45}
+  .pull .hl{color:var(--violet)}
+
+  footer{padding:40px 0 64px;color:var(--dim);font-size:13px}
+  footer a{color:var(--mut)}
+  @media(max-width:720px){
+    .metrics{grid-template-columns:repeat(2,1fr)}
+    .grid2{grid-template-columns:1fr}
+    .finding{grid-template-columns:1fr;gap:6px}
+  }
+
+  .h3{margin:28px 0 8px;font-size:1.05rem;color:var(--ink)}
+  section p{color:var(--mut);line-height:1.7;max-width:760px}
+  .list{color:var(--mut);line-height:1.7;max-width:760px;padding-left:1.2em}
+  .list li{margin:6px 0}
+  pre.mermaid{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+  .crumb{font-size:.9rem;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="crumb"><a href="./">← Part one: the falsification-first research platform</a></div>
+    <div class="eyebrow">Case study, part two · Validation engineering</div>
+    <h1>How I validate a trading system that uses LLMs before it touches money</h1>
+    <p class="lede">Raju Shanigarapu · October 2026. Part one showed that no strategy survived out-of-sample testing. This part is about the engineering that keeps the system honest while it runs: shadow trading, deterministic replay, a CI fidelity gate and per-call cost accounting.</p>
+    <div class="metrics">
+      <div class="metric"><div class="n">1e-12</div><div class="l">fidelity tolerance in CI</div><div class="s">live runner vs frozen research code</div></div>
+      <div class="metric"><div class="n">0 diffs</div><div class="l">deterministic day replay</div><div class="s">1 October 2026, recorded inputs</div></div>
+      <div class="metric"><div class="n">~1,700</div><div class="l">tests</div><div class="s">coverage floor only ratchets up</div></div>
+      <div class="metric"><div class="n">paper only</div><div class="l">no real money</div><div class="s">no claim about returns</div></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>The failure that matters is the quiet one</h2>
+    <p>On 30 September 2026 my trading system ran its first shadow cycle on a schedule. The job finished. Nothing raised an exception. The database commit succeeded.</p>
+    <p>The book was empty.</p>
+    <p>The run was supposed to seed a paper portfolio with $100,000 of cash and rebalance it into the target weights. What it actually wrote was a set of zero-quantity position rows, no trades, and a daily snapshot with a NAV of 0. Next to it, the "expected NAV" I compare against read 512,273, because that calculation had been compounding the whole backtest instead of starting at the seed.</p>
+    <p>A crash would have been easy. This is the failure I care about most as a tester: the system says "done" and the result is wrong. This post covers how I test for that, and what the testing does not prove yet.</p>
+  </div>
+</section>
+<section>
+  <div class="wrap">
+    <h2>What the system is, and what it is not</h2>
+    <p>autonomous-investor is a research and validation environment for equity strategies. It scores candidates through a signal pipeline and tests every idea out-of-sample against the passive alternative it would have to beat.</p>
+    <p>Some of that pipeline uses LLMs: a sentiment agent, a fundamentals thesis, signal fusion, a weekly report, and a seven-node bull/bear debate graph. LLM calls go through model chains that try free-tier models on Google AI Studio and OpenRouter first, then fall through to the next model on an error or an unusable reply. Paid Anthropic models are an opt-in fallback with a budget cap.</p>
+    <p>Two facts frame everything that follows:</p>
+    <ul class="list">
+      <li><b>No strategy I tested survived.</b> Momentum, post-earnings drift, congressional trades, LLM classification, crypto carry and others were retired after hostile out-of-sample tests against the right benchmark, net of costs. The default mode is <code>INDEXED</code>: no new signals, no new entries.</li>
+      <li><b>It has never traded real money.</b> Orders go to Alpaca's paper endpoint unless two separate live-trading switches are both set. This post makes no claim about returns.</li>
+    </ul>
+    <p>What is left is the platform, including a shadow deployment that runs a frozen strategy forward every trading day. The shadow book trades two frozen rule-based sleeves (a CEF discount signal and a trend signal). It uses no LLM, deliberately: the safety paths (shadow, order state machine, ledger, halt manager, risk guard) import no LLM module.</p>
+    <pre class="mermaid">flowchart LR
+    D[Data ingestion&lt;br/&gt;prices, news, macro, filings] --&gt; A[Analysis agents&lt;br/&gt;technical, fundamental,&lt;br/&gt;sentiment, smart money, macro]
+    A --&gt; F[Signal fusion&lt;br/&gt;+ debate graph]
+    L[LLM chains&lt;br/&gt;free-first fallback&lt;br/&gt;paid tier budget-gated] -.-&gt; A
+    L -.-&gt; F
+    F --&gt; R[Risk guard&lt;br/&gt;hard limits, circuit breakers]
+    R --&gt; E[Execution&lt;br/&gt;Alpaca paper]
+    S[Shadow cycle 15:30 ET&lt;br/&gt;frozen CEF + trend rules&lt;br/&gt;no LLM imports] --&gt; B[(Shadow book&lt;br/&gt;trades, snapshots,&lt;br/&gt;recorded inputs)]
+    B --&gt; P[Deterministic replay]
+    C[Cost guard&lt;br/&gt;usage log per call] -.-&gt; L</pre>
+  </div>
+</section>
+<section>
+  <div class="wrap">
+    <h2>The validation layers</h2>
+    <h3 class="h3">1. Unit and integration tests, with a ratcheting coverage floor</h3>
+    <p>The suite has about 1,700 tests. The last merged change reported 1,686 passing with 57.89% line coverage. The floor in <code>pytest.ini</code> is a ratchet: it is set to the measured total rounded down, and it only moves up. It went from 55 to 56 to 57 during September.</p>
+    <p>58% is not high, and I don't treat it as a quality signal. The ratchet stops backsliding; it says nothing about whether tests assert the right things. One bug proved that: the cost guard had an invalid Haiku model id, and the test for it never failed because the test kept its own copy of the constant instead of importing it.</p>
+    <h3 class="h3">2. The fidelity gate in CI</h3>
+    <p>The shadow runner has to do exactly what the frozen research harness did. If it doesn't, the shadow record measures my reimplementation rather than the strategy. A GitHub Actions workflow runs two jobs on every change to the app, tests, migrations or dependencies:</p>
+    <ul class="list">
+      <li><b>Fidelity:</b> deterministic shadow unit tests, then a marked fidelity suite. It checks two things at a tolerance of 1e-12. First, no lookahead: the signal on date T computed from history cut off at T must equal the signal computed on full history at T. Second, the runner's portfolio returns must reproduce the frozen audit script's construction.</li>
+      <li><b>Test:</b> <code>ruff check</code> (since #39 a violation fails the build) and the full non-fidelity suite with the coverage floor enforced.</li>
+    </ul>
+    <p>The honest weakness is that the fidelity tests need live Yahoo data and skip themselves when it is unreachable. I chose that so CI does not fail on network flakiness. The cost is that a green run can mean "skipped". The workflow prints skip reasons (<code>-rs</code>), but a skip still does not block a merge.</p>
+    <h3 class="h3">3. Shadow deployment and deterministic replay</h3>
+    <p>The shadow cycle runs Monday to Friday at 15:30 ET, 30 minutes before the close, because post-close IEX quotes are unusable. Each run records its inputs in a <code>shadow_cycle_inputs</code> row: outcome, rebalance flag, seed capital, expected NAV, target weights, the book before the run, every quote it was served, and a SHA-256 hash plus window of the price history.</p>
+    <p>The full history is several MB a day and yfinance is not bit-stable across fetches, so I store only the hash. Replay doesn't need the history, because the two values derived from it (target weights, expected NAV) are stored as they were.</p>
+    <p><code>replay_shadow_day</code> rebuilds a day's runs in order, in a scratch in-memory book, through the real cycle code. It then diffs the result against the recorded trades and snapshot, with a relative tolerance of 1e-9. It only reads the real database. The ops wrapper exits 0 on a match, 1 on a diff and 2 when nothing was recorded, so it can be scripted. The replay for 1 October returned <code>match</code>: one run, zero diffs.</p>
+    <p>Replay deliberately does not re-evaluate the rebalance rule. The book had been rebalancing on the first run of each month while its backtest rebalances on the last trading day, so the forward record drifted from its own benchmark. The fixed rule (#48) is the last full-session NYSE trading day, with one catch-up if missed and never two per month. Replay uses the <code>is_rebalance_day</code> flag recorded with each run, so days recorded under the old rule still replay unchanged; a test patches the rule to raise and proves it.</p>
+    <h3 class="h3">4. Cost accounting</h3>
+    <p>The monthly budget tier (normal, Haiku-only, paused) used to be display-only. The one method that acted on it had no callers. I made every paid Anthropic call site check the tier before it runs (#46). Then I found that the debate graph, the sentiment fallback, the bootstrap key check and the free chains wrote no usage rows at all, so the projection that sets the tier only saw part of the spend. #51 routes all of them through <code>track_usage</code>. Free chain responses are recorded at $0 with real token counts, so volume is visible without moving the tier; a chain overridden to a paid model is charged what OpenRouter reports.</p>
+  </div>
+</section>
+<section>
+  <div class="wrap">
+    <h2>War story 1: one SQLite connection, shared by everyone</h2>
+    <p>The 30 September failure was in <code>app/database.py</code>. The async engine for the file database used <code>StaticPool</code>, so every session (scheduler jobs, web requests) shared one SQLite connection. SQLite transactions belong to the connection, not the session. When any other session closed, the pool rolled back the shared connection and undid the seed's flushed but uncommitted <code>INSERT</code>. The seed's commit then succeeded with nothing in it. The rebalance saw NAV 0. The partial set of six position rows for eight targets plus cash fits a second rollback landing during the row-by-row inserts.</p>
+    <p>Replay could not have caught this. It runs one session on a private in-memory database, so it cannot see cross-session effects. Worse, live captured <code>positions_before</code> after the seed, and replay read that empty book as "unseeded, seed it". So I wrote a test that goes through the real scheduler job wrapper, the real settings and the application's own engine, against a temporary file database. It opens and closes another session between the seed's insert and its commit. It fails with <code>StaticPool</code> and passes with the fix.</p>
+    <p>The fix (#49): <code>StaticPool</code> only for in-memory SQLite; the seed is read back after commit and the run fails loudly if it is missing; expected NAV starts at the seed; input capture records the book before the seed. The 30 September rows are kept, and their replay still reports a diff, which is the correct answer.</p>
+    <p>The trade-off: sessions now contend for the SQLite write lock (5-second busy timeout). A job that holds an uncommitted write across a slow await can now fail with "database is locked", where before it silently corrupted other sessions. I prefer the failure I can see.</p>
+  </div>
+</section>
+<section>
+  <div class="wrap">
+    <h2>War story 2: New Year's Eve, 2027</h2>
+    <p>While writing the rebalance rule (#48), I noticed that <code>is_nyse_holiday</code> treated 31 December as a holiday whenever 1 January fell on a Saturday. That is the usual weekend-observance rule, but NYSE Rule 7.2 makes an exception: when New Year's Day is a Saturday there is no Friday observance and the market is open. The old code marked 2021-12-31 and 2027-12-31 as closed. The scheduler would have skipped a real trading day, and <code>last_trading_day(2027, 12)</code> returned 30 December, moving the December 2027 rebalance a day early.</p>
+    <p>I kept it out of the rebalance PR and fixed it separately (#50). Every closure now lives in its own calendar year, and a test checks that no closure leaks into another year from 2020 to 2040. The bug would have stayed silent until December 2027 and then shown up as a one-day tracking difference that looks like noise.</p>
+  </div>
+</section>
+<section>
+  <div class="wrap">
+    <h2>What I'd do differently</h2>
+    <ul class="list">
+      <li><b>Test the real wiring from the first day.</b> My shadow tests used in-memory databases where <code>StaticPool</code> is correct. The bug only existed in the production configuration. A live-path test should have been the first test, not the post-mortem.</li>
+      <li><b>Capture inputs from the start.</b> Input recording (#45) merged only hours before the first scheduled run. Having the record of the failed day was luck, not planning.</li>
+      <li><b>Treat a skipped gate as a failure, or at least a separate status.</b> A fidelity suite that skips on network loss is a gap I accepted for convenience.</li>
+      <li><b>Mutation testing over line coverage.</b> The Haiku constant bug survived a passing test. A mutation score would have caught that kind of test; a coverage percentage cannot.</li>
+    </ul>
+  </div>
+</section>
+<section>
+  <div class="wrap">
+    <h2>What's next</h2>
+    <p>The shadow stage has pre-committed exit criteria: at least 60 trading days, annualized tracking error under 400 bps, blended execution cost under 75 bps, zero unhandled failures and every rebalance fired. As of this draft the book has one clean recorded day. None of those criteria is met yet. A small real-money stage depends on meeting them.</p>
+    <p><b>Proven so far:</b> the shadow runner reproduces the frozen research code at machine precision, when data is available; recorded days replay deterministically; the two calendar and concurrency bugs above are fixed with regression tests; and paid LLM spend is metered and capped at every call site I found.</p>
+    <p><b>Not proven:</b> any edge or return (the research result is negative); behaviour with real money, real fills or real slippage; how the system holds up over a long horizon; and whether SQLite under the new locking behaviour holds up under heavier concurrent load.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Autonomous Investor, a personal research project. Paper trading only; not investment advice. <a href="./">Part one: the falsification-first research platform</a>.
+  </div>
+</footer>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "dark" });
+</script>
+</body>
+</html>
